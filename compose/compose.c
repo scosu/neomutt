@@ -1142,21 +1142,16 @@ static void mutt_gen_compose_attach_list(struct AttachCtx *actx, struct Body *m,
 {
   for (; m; m = m->next)
   {
+    struct AttachPtr *ap = mutt_mem_calloc(1, sizeof(struct AttachPtr));
+    mutt_actx_add_attach(actx, ap);
+    ap->body = m;
+    m->aptr = ap;
+    ap->parent_type = parent_type;
+    ap->level = level;
     if ((m->type == TYPE_MULTIPART) && m->parts &&
         (!(WithCrypto & APPLICATION_PGP) || !mutt_is_multipart_encrypted(m)))
     {
-      mutt_gen_compose_attach_list(actx, m->parts, m->type, level);
-    }
-    else
-    {
-      struct AttachPtr *ap = mutt_mem_calloc(1, sizeof(struct AttachPtr));
-      mutt_actx_add_attach(actx, ap);
-      ap->body = m;
-      m->aptr = ap;
-      ap->parent_type = parent_type;
-      ap->level = level;
-
-      /* We don't support multipart messages in the compose menu yet */
+      mutt_gen_compose_attach_list(actx, m->parts, m->type, level + 1);
     }
   }
 }
