@@ -663,7 +663,7 @@ int mutt_view_attachment(FILE *fp, struct Body *a, enum ViewAttachMode mode,
     rc = mutt_do_pager(desc, mutt_buffer_string(pagerfile),
                        MUTT_PAGER_ATTACHMENT |
                        (is_message ? MUTT_PAGER_MESSAGE : MUTT_PAGER_NO_FLAGS) |
-                       (use_mailcap ? MUTT_PAGER_NOWRAP : MUTT_PAGER_NO_FLAGS),
+                       (use_mailcap && entry->xneomuttnowrap ? MUTT_PAGER_NOWRAP : MUTT_PAGER_NO_FLAGS),
                        &info);
     mutt_buffer_reset(pagerfile);
     unlink_pagerfile = false;
