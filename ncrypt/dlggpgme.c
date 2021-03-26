@@ -896,6 +896,7 @@ leave:
   pview.flags = MUTT_PAGER_NO_FLAGS;
   pview.mode = PAGER_MODE_OTHER;
 
+  // TODO check return value here
   mutt_do_pager(&pview);
 
 cleanup:

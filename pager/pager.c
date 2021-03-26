@@ -169,8 +169,8 @@ struct PagerRedrawData
   int curline;
   int topline;
   bool force_redraw;
-  int has_types;
-  PagerFlags hide_quoted;
+  int has_types;          // TODO is this a bool or a flag?
+  PagerFlags hide_quoted; // TODO can this be removed in favor of view->flags?
   int q_level;
   struct QClass *quote_list;
   LOFF_T last_pos;
@@ -178,12 +178,12 @@ struct PagerRedrawData
   struct Menu *menu; ///< the Pager Index (PI)
   regex_t search_re;
   bool search_compiled;
-  PagerFlags search_flag;
+  PagerFlags search_flag; // TODO can this be removed in favor of view->flags?
   bool search_back;
   char searchbuf[256];
   struct Line *line_info;
-  FILE *fp;
-  struct stat sb;
+  FILE *fp;       // TODO: view->data already contains this
+  struct stat sb; // TODO: this too can be passed from mutt_pager()
 };
 
 /* hack to return to position when returning from index to same message */
@@ -2056,6 +2056,8 @@ static void pager_custom_redraw(struct Menu *pager_menu)
     mutt_curses_set_color(MT_COLOR_NORMAL);
     mutt_window_clear(rd->pview->win_pager);
 
+    // TODO: give a meaningful name to:
+    // ((m->vcount + 1) < c_pager_index_lines))
     if ((rd->pview->mode == PAGER_MODE_EMAIL) && ((m->vcount + 1) < c_pager_index_lines))
     {
       rd->indexlen = m->vcount + 1;
@@ -2092,6 +2094,8 @@ static void pager_custom_redraw(struct Menu *pager_menu)
       FREE(&Resize);
     }
 
+    // TODO give a meaningful name to
+    // (c_pager_index_lines != 0) e.g. "is_index_visible"
     if ((rd->pview->mode == PAGER_MODE_EMAIL) && (c_pager_index_lines != 0))
     {
       if (!rd->menu)
@@ -2365,6 +2369,7 @@ int mutt_pager(struct PagerView *pview)
   assert(pview->win_pbar);
 
   switch (pview->mode)
+  // TODO cast data do concrete type here and run corresponding function
   {
     case PAGER_MODE_EMAIL:
       // This case was previously identified by IsEmail macro
@@ -2389,6 +2394,7 @@ int mutt_pager(struct PagerView *pview)
       assert(pview->pdata->ctx->mailbox);
       if (pview->pdata->fp && pview->pdata->body->email)
       {
+        // TODO: refactor this ugliness in the next iteration of refactoring.
         // Special case: attachment is a full-blown email message.
         // Yes, emails can contain other emails.
         pview->mode = PAGER_MODE_ATTACH_E;
@@ -2446,6 +2452,7 @@ int mutt_pager(struct PagerView *pview)
 #endif
 
   //---------- setup flags ----------------------------------------------------
+  // TODO: @flatcap: are MUTT_SHOWCOLOR and MUTT_SHOWFLAT mutually exclusive?
   if (!(pview->flags & MUTT_SHOWCOLOR))
     pview->flags |= MUTT_SHOWFLAT;
 
@@ -2504,6 +2511,11 @@ int mutt_pager(struct PagerView *pview)
   mutt_menu_push_current(pager_menu);
 
   //---------- restore global state if needed ---------------------------------
+  // FIXME: TopLine&OldEmail hack
+  // this is when pager is re-called by index, after a hacky "delegation"
+  // TopLine was keeping the old position where user was viewing someting
+  // we cannot just jump to TopLine, we need to scroll to it in increments
+  // of current screen height (otherwise crash!)
   while (pview->mode == PAGER_MODE_EMAIL && (OldEmail == pview->pdata->email) // are we "resuming" to the same Email?
          && (TopLine != rd.topline) // is saved offset different?
          && rd.line_info[rd.curline].offset < (rd.sb.st_size - 1))
@@ -3280,11 +3292,13 @@ int mutt_pager(struct PagerView *pview)
           break;
         if (pview->mode == PAGER_MODE_ATTACH_E)
         {
+          // TODO refactor mutt_attach_resend
           mutt_attach_resend(pview->pdata->fp, ctx_mailbox(pview->pdata->ctx),
                              pview->pdata->actx, pview->pdata->body);
         }
         else
         {
+          // TODO refactor mutt_resend_message
           mutt_resend_message(NULL, ctx_mailbox(pview->pdata->ctx),
                               pview->pdata->email, NeoMutt->sub);
         }
@@ -3311,6 +3325,7 @@ int mutt_pager(struct PagerView *pview)
           struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
           emaillist_add_email(&el, pview->pdata->email);
 
+          // TODO refactor mutt_send_message
           mutt_send_message(SEND_TO_SENDER, NULL, NULL,
                             ctx_mailbox(pview->pdata->ctx), &el, NeoMutt->sub);
           emaillist_clear(&el);
@@ -3538,6 +3553,7 @@ int mutt_pager(struct PagerView *pview)
         else
         {
           struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
+          //TODO refactor el_add_tagged
           el_add_tagged(&el, pview->pdata->ctx, pview->pdata->email, false);
           mutt_pipe_message(m, &el);
           emaillist_clear(&el);
@@ -3560,6 +3576,7 @@ int mutt_pager(struct PagerView *pview)
         else
         {
           struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
+          //TODO refactor el_add_tagged
           el_add_tagged(&el, pview->pdata->ctx, pview->pdata->email, false);
           mutt_print_message(m, &el);
           emaillist_clear(&el);
@@ -3574,6 +3591,7 @@ int mutt_pager(struct PagerView *pview)
         if (assert_attach_msg_mode(OptAttachMsg))
           break;
 
+        // TODO refactor mutt_send_message
         mutt_send_message(SEND_NO_FLAGS, NULL, NULL,
                           ctx_mailbox(pview->pdata->ctx), NULL, NeoMutt->sub);
         pager_menu->redraw = REDRAW_FULL;
@@ -3596,6 +3614,7 @@ int mutt_pager(struct PagerView *pview)
           break;
         }
 
+        // TODO refactor mutt_send_message
         mutt_send_message(SEND_NEWS, NULL, NULL, ctx_mailbox(pview->pdata->ctx),
                           NULL, NeoMutt->sub);
         pager_menu->redraw = REDRAW_FULL;
@@ -3629,7 +3648,7 @@ int mutt_pager(struct PagerView *pview)
         {
           struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
           emaillist_add_email(&el, pview->pdata->email);
-
+          // TODO refactor mutt_send_message
           mutt_send_message(SEND_NEWS | SEND_FORWARD, NULL, NULL,
                             ctx_mailbox(pview->pdata->ctx), &el, NeoMutt->sub);
           emaillist_clear(&el);
@@ -3676,6 +3695,7 @@ int mutt_pager(struct PagerView *pview)
           {
             struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
             emaillist_add_email(&el, pview->pdata->email);
+            // TODO refactor mutt_send_message
             mutt_send_message(SEND_NEWS | SEND_REPLY, NULL, NULL,
                               ctx_mailbox(pview->pdata->ctx), &el, NeoMutt->sub);
             emaillist_clear(&el);
@@ -3718,6 +3738,7 @@ int mutt_pager(struct PagerView *pview)
         {
           struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
           emaillist_add_email(&el, pview->pdata->email);
+          // TODO refactor mutt_send_message
           mutt_send_message(replyflags, NULL, NULL,
                             ctx_mailbox(pview->pdata->ctx), &el, NeoMutt->sub);
           emaillist_clear(&el);
@@ -3737,6 +3758,7 @@ int mutt_pager(struct PagerView *pview)
         struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
         emaillist_add_email(&el, pview->pdata->email);
 
+        // TODO refactor mutt_send_message
         mutt_send_message(SEND_POSTPONED, NULL, NULL,
                           ctx_mailbox(pview->pdata->ctx), &el, NeoMutt->sub);
         emaillist_clear(&el);
@@ -3764,6 +3786,7 @@ int mutt_pager(struct PagerView *pview)
           struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
           emaillist_add_email(&el, pview->pdata->email);
 
+          // TODO refactor mutt_send_message
           mutt_send_message(SEND_FORWARD, NULL, NULL,
                             ctx_mailbox(pview->pdata->ctx), &el, NeoMutt->sub);
           emaillist_clear(&el);
@@ -4001,6 +4024,7 @@ int mutt_pager(struct PagerView *pview)
         struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
         emaillist_add_email(&el, pview->pdata->email);
 
+        // TODO refactor mutt_send_message
         mutt_send_message(SEND_KEY, NULL, NULL, ctx_mailbox(pview->pdata->ctx),
                           &el, NeoMutt->sub);
         emaillist_clear(&el);
@@ -4120,6 +4144,9 @@ int mutt_pager(struct PagerView *pview)
         mutt_clear_pager_position();
         break;
       default:
+        // FIXME: TopLine&OldEmail hack
+        // This happens when pager "delegates" something to index, quitting,
+        // and expects to be re-opened again
         TopLine = rd.topline;
         OldEmail = pview->pdata->email;
         break;

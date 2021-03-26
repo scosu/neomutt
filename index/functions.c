@@ -2021,6 +2021,7 @@ static enum IndexRetval op_show_log_messages(struct IndexSharedData *shared,
   pview.flags = MUTT_PAGER_LOGS;
   pview.mode = PAGER_MODE_OTHER;
 
+  // TODO check return value here
   mutt_do_pager(&pview);
 
   return IR_VOID;

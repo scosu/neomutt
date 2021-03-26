@@ -626,6 +626,7 @@ struct PgpKeyInfo *dlg_select_pgp_key(struct PgpKeyInfo *keys,
         pview.flags = MUTT_PAGER_NO_FLAGS;
         pview.mode = PAGER_MODE_OTHER;
 
+        // TODO check return value here
         mutt_do_pager(&pview);
         mutt_buffer_pool_release(&tempfile);
         menu->redraw = REDRAW_FULL;

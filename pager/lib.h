@@ -128,6 +128,7 @@ enum PagerMode
 
 /**
  * struct PagerData - Data to be displayed by PagerView
+ * TODO: decompose into separate different objects (email/attachment/help/etc)
  */
 struct PagerData
 {
