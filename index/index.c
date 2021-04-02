@@ -710,7 +710,7 @@ static void change_folder_mailbox(struct Menu *menu, struct Mailbox *m, int *old
       new_last_folder = mutt_str_dup(mailbox_path(m_ctx));
     *oldcount = m_ctx->msg_count;
 
-    const enum MxStatus check = mx_mbox_close(Context->mailbox);
+    const enum MxStatus check = mx_mbox_close(ctx_mailbox(Context));
     if (check == MX_STATUS_OK)
     {
       ctx_free(&Context);
@@ -762,7 +762,7 @@ static void change_folder_mailbox(struct Menu *menu, struct Mailbox *m, int *old
   if (mx_mbox_open(m, flags))
   {
     Context = ctx_new(m);
-    menu->current = ci_first_message(Context->mailbox);
+    menu->current = ci_first_message(ctx_mailbox(Context));
 #ifdef USE_INOTIFY
     mutt_monitor_add(NULL);
 #endif
@@ -779,7 +779,7 @@ static void change_folder_mailbox(struct Menu *menu, struct Mailbox *m, int *old
     collapse_all(Context, menu, 0);
 
   struct MuttWindow *dlg = dialog_find(menu->win_index);
-  struct EventMailbox em = { Context ? Context->mailbox : NULL };
+  struct EventMailbox em = { Context ? ctx_mailbox(Context) : NULL };
   notify_send(dlg->notify, NT_MAILBOX, NT_MAILBOX_SWITCH, &em);
 
   mutt_clear_error();
@@ -1185,7 +1185,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
   struct MuttWindow *win_pbar = mutt_window_find(dlg, WT_PAGER_BAR);
 
 #ifdef USE_NNTP
-  if (ctx_mailbox(Context) && (Context->mailbox->type == MUTT_NNTP))
+  if (ctx_mailbox(Context) && (ctx_mailbox(Context)->type == MUTT_NNTP))
     dlg->help_data = IndexNewsHelp;
   else
 #endif
@@ -1199,7 +1199,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
 
   menu->make_entry = index_make_entry;
   menu->color = index_color;
-  menu->current = Context ? ci_first_message(Context->mailbox) : 0;
+  menu->current = Context ? ci_first_message(ctx_mailbox(Context)) : 0;
   menu->custom_redraw = index_custom_redraw;
   mutt_menu_push_current(menu);
   mutt_window_reflow(NULL);
@@ -1234,18 +1234,18 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
      * any 'op' below could do mutt_enter_command(), either here or
      * from any new menu launched, and change $sort/$sort_aux */
     if (OptNeedResort && ctx_mailbox(Context) &&
-        (Context->mailbox->msg_count != 0) && (menu->current >= 0))
+        (ctx_mailbox(Context)->msg_count != 0) && (menu->current >= 0))
     {
       resort_index(Context, menu);
     }
 
-    menu->max = ctx_mailbox(Context) ? Context->mailbox->vcount : 0;
-    oldcount = ctx_mailbox(Context) ? Context->mailbox->msg_count : 0;
+    menu->max = ctx_mailbox(Context) ? ctx_mailbox(Context)->vcount : 0;
+    oldcount = ctx_mailbox(Context) ? ctx_mailbox(Context)->msg_count : 0;
 
     {
       const short c_sort = cs_subset_sort(NeoMutt->sub, "sort");
       if (OptRedrawTree && ctx_mailbox(Context) &&
-          (Context->mailbox->msg_count != 0) && ((c_sort & SORT_MASK) == SORT_THREADS))
+          (ctx_mailbox(Context)->msg_count != 0) && ((c_sort & SORT_MASK) == SORT_THREADS))
       {
         mutt_draw_tree(Context->threads);
         menu->redraw |= REDRAW_STATUS;
@@ -1261,11 +1261,11 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
       /* check for new mail in the mailbox.  If nonzero, then something has
        * changed about the file (either we got new mail or the file was
        * modified underneath us.) */
-      enum MxStatus check = mx_mbox_check(Context->mailbox);
+      enum MxStatus check = mx_mbox_check(ctx_mailbox(Context));
 
       if (check == MX_STATUS_ERROR)
       {
-        if (mutt_buffer_is_empty(&Context->mailbox->pathbuf))
+        if (mutt_buffer_is_empty(&ctx_mailbox(Context)->pathbuf))
         {
           /* fatal error occurred */
           ctx_free(&Context);
@@ -1285,9 +1285,9 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         }
         else if (check == MX_STATUS_NEW_MAIL)
         {
-          for (size_t i = 0; i < Context->mailbox->msg_count; i++)
+          for (size_t i = 0; i < ctx_mailbox(Context)->msg_count; i++)
           {
-            const struct Email *e = Context->mailbox->emails[i];
+            const struct Email *e = ctx_mailbox(Context)->emails[i];
             if (e && !e->read && !e->old)
             {
               mutt_message(_("New mail in this mailbox"));
@@ -1299,7 +1299,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
               if (c_new_mail_command)
               {
                 char cmd[1024];
-                menu_status_line(cmd, sizeof(cmd), menu, Context->mailbox,
+                menu_status_line(cmd, sizeof(cmd), menu, ctx_mailbox(Context),
                                  NONULL(c_new_mail_command));
                 if (mutt_system(cmd) != 0)
                   mutt_error(_("Error running \"%s\""), cmd);
@@ -1316,24 +1316,24 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         /* avoid the message being overwritten by mailbox */
         do_mailbox_notify = false;
 
-        bool verbose = Context->mailbox->verbose;
-        Context->mailbox->verbose = false;
+        bool verbose = ctx_mailbox(Context)->verbose;
+        ctx_mailbox(Context)->verbose = false;
         update_index(menu, Context, check, oldcount, &cur);
-        Context->mailbox->verbose = verbose;
-        menu->max = Context->mailbox->vcount;
+        ctx_mailbox(Context)->verbose = verbose;
+        menu->max = ctx_mailbox(Context)->vcount;
         menu->redraw = REDRAW_FULL;
         OptSearchInvalid = true;
       }
 
       if (Context)
       {
-        set_current_email(&cur, mutt_get_virt_email(Context->mailbox, menu->current));
+        set_current_email(&cur, mutt_get_virt_email(ctx_mailbox(Context), menu->current));
       }
     }
 
     if (!attach_msg)
     {
-      struct Mailbox *m = Context ? Context->mailbox : NULL;
+      struct Mailbox *m = Context ? ctx_mailbox(Context) : NULL;
       /* check for new mail in the incoming folders */
       oldcount = newcount;
       newcount = mutt_mailbox_check(m, 0);
@@ -1450,7 +1450,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           continue;
         }
 
-        if (Context->mailbox->msg_tagged == 0)
+        if (ctx_mailbox(Context)->msg_tagged == 0)
         {
           if (op == OP_TAG_PREFIX)
             mutt_error(_("No tagged messages"));
@@ -1466,7 +1466,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         tag = true;
         continue;
       }
-      else if (c_auto_tag && ctx_mailbox(Context) && (Context->mailbox->msg_tagged != 0))
+      else if (c_auto_tag && ctx_mailbox(Context) && (ctx_mailbox(Context)->msg_tagged != 0))
       {
         tag = true;
       }
@@ -1480,7 +1480,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
 
 #ifdef USE_NOTMUCH
     if (Context)
-      nm_db_debug_check(Context->mailbox);
+      nm_db_debug_check(ctx_mailbox(Context));
 #endif
 
     switch (op)
@@ -1543,7 +1543,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         if (!prereq(Context, menu, CHECK_IN_MAILBOX | CHECK_READONLY | CHECK_ATTACH))
           break;
         char buf[PATH_MAX] = { 0 };
-        if (Context->mailbox->type == MUTT_NNTP)
+        if (ctx_mailbox(Context)->type == MUTT_NNTP)
         {
           if (op == OP_GET_MESSAGE)
           {
@@ -1563,9 +1563,9 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
             }
             mutt_str_copy(buf, STAILQ_FIRST(&cur.e->env->references)->data, sizeof(buf));
           }
-          if (!Context->mailbox->id_hash)
-            Context->mailbox->id_hash = mutt_make_id_hash(Context->mailbox);
-          struct Email *e = mutt_hash_find(Context->mailbox->id_hash, buf);
+          if (!ctx_mailbox(Context)->id_hash)
+            ctx_mailbox(Context)->id_hash = mutt_make_id_hash(ctx_mailbox(Context));
+          struct Email *e = mutt_hash_find(ctx_mailbox(Context)->id_hash, buf);
           if (e)
           {
             if (e->vnum != -1)
@@ -1576,7 +1576,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
             else if (e->collapsed)
             {
               mutt_uncollapse_thread(e);
-              mutt_set_vnum(Context->mailbox);
+              mutt_set_vnum(ctx_mailbox(Context));
               menu->current = e->vnum;
               menu->redraw = REDRAW_MOTION_RESYNC;
             }
@@ -1586,11 +1586,11 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           else
           {
             mutt_message(_("Fetching %s from server..."), buf);
-            int rc = nntp_check_msgid(Context->mailbox, buf);
+            int rc = nntp_check_msgid(ctx_mailbox(Context), buf);
             if (rc == 0)
             {
-              e = Context->mailbox->emails[Context->mailbox->msg_count - 1];
-              mutt_sort_headers(Context->mailbox, Context->threads, false,
+              e = ctx_mailbox(Context)->emails[ctx_mailbox(Context)->msg_count - 1];
+              mutt_sort_headers(ctx_mailbox(Context), Context->threads, false,
                                 &Context->vsize);
               menu->current = e->vnum;
               menu->redraw = REDRAW_FULL;
@@ -1610,14 +1610,14 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         {
           break;
         }
-        if (Context->mailbox->type != MUTT_NNTP)
+        if (ctx_mailbox(Context)->type != MUTT_NNTP)
           break;
 
         if (!cur.e)
           break;
 
         char buf[PATH_MAX] = { 0 };
-        int oldmsgcount = Context->mailbox->msg_count;
+        int oldmsgcount = ctx_mailbox(Context)->msg_count;
         int oldindex = cur.e->index;
         int rc = 0;
 
@@ -1628,8 +1628,8 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         }
 
         mutt_message(_("Fetching message headers..."));
-        if (!Context->mailbox->id_hash)
-          Context->mailbox->id_hash = mutt_make_id_hash(Context->mailbox);
+        if (!ctx_mailbox(Context)->id_hash)
+          ctx_mailbox(Context)->id_hash = mutt_make_id_hash(ctx_mailbox(Context));
         mutt_str_copy(buf, cur.e->env->message_id, sizeof(buf));
 
         /* trying to find msgid of the root message */
@@ -1638,9 +1638,9 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           struct ListNode *ref = NULL;
           STAILQ_FOREACH(ref, &cur.e->env->references, entries)
           {
-            if (!mutt_hash_find(Context->mailbox->id_hash, ref->data))
+            if (!mutt_hash_find(ctx_mailbox(Context)->id_hash, ref->data))
             {
-              rc = nntp_check_msgid(Context->mailbox, ref->data);
+              rc = nntp_check_msgid(ctx_mailbox(Context), ref->data);
               if (rc < 0)
                 break;
             }
@@ -1653,19 +1653,19 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
 
         /* fetching all child messages */
         if (rc >= 0)
-          rc = nntp_check_children(Context->mailbox, buf);
+          rc = nntp_check_children(ctx_mailbox(Context), buf);
 
         /* at least one message has been loaded */
-        if (Context->mailbox->msg_count > oldmsgcount)
+        if (ctx_mailbox(Context)->msg_count > oldmsgcount)
         {
-          struct Email *e_oldcur = mutt_get_virt_email(Context->mailbox, menu->current);
-          bool verbose = Context->mailbox->verbose;
+          struct Email *e_oldcur = mutt_get_virt_email(ctx_mailbox(Context), menu->current);
+          bool verbose = ctx_mailbox(Context)->verbose;
 
           if (rc < 0)
-            Context->mailbox->verbose = false;
-          mutt_sort_headers(Context->mailbox, Context->threads,
+            ctx_mailbox(Context)->verbose = false;
+          mutt_sort_headers(ctx_mailbox(Context), Context->threads,
                             (op == OP_RECONSTRUCT_THREAD), &Context->vsize);
-          Context->mailbox->verbose = verbose;
+          ctx_mailbox(Context)->verbose = verbose;
 
           /* Similar to OP_MAIN_ENTIRE_THREAD, keep displaying the old message, but
             * update the index */
@@ -1678,15 +1678,15 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           }
 
           /* if the root message was retrieved, move to it */
-          struct Email *e = mutt_hash_find(Context->mailbox->id_hash, buf);
+          struct Email *e = mutt_hash_find(ctx_mailbox(Context)->id_hash, buf);
           if (e)
             menu->current = e->vnum;
           else
           {
             /* try to restore old position */
-            for (int i = 0; i < Context->mailbox->msg_count; i++)
+            for (int i = 0; i < ctx_mailbox(Context)->msg_count; i++)
             {
-              e = Context->mailbox->emails[i];
+              e = ctx_mailbox(Context)->emails[i];
               if (!e)
                 break;
               if (e->index == oldindex)
@@ -1732,18 +1732,18 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         }
         else if (mutt_str_atoi(buf, &msg_num) < 0)
           mutt_error(_("Argument must be a message number"));
-        else if ((msg_num < 1) || (msg_num > Context->mailbox->msg_count))
+        else if ((msg_num < 1) || (msg_num > ctx_mailbox(Context)->msg_count))
           mutt_error(_("Invalid message number"));
-        else if (!Context->mailbox->emails[msg_num - 1]->visible)
+        else if (!ctx_mailbox(Context)->emails[msg_num - 1]->visible)
           mutt_error(_("That message is not visible"));
         else
         {
-          struct Email *e = Context->mailbox->emails[msg_num - 1];
+          struct Email *e = ctx_mailbox(Context)->emails[msg_num - 1];
 
-          if (mutt_messages_in_thread(Context->mailbox, e, MIT_POSITION) > 1)
+          if (mutt_messages_in_thread(ctx_mailbox(Context), e, MIT_POSITION) > 1)
           {
             mutt_uncollapse_thread(e);
-            mutt_set_vnum(Context->mailbox);
+            mutt_set_vnum(ctx_mailbox(Context));
           }
           menu->current = e->vnum;
         }
@@ -1772,7 +1772,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         /* L10N: Due to the implementation details we do not know whether we
             delete zero, 1, 12, ... messages. So in English we use
             "messages". Your language might have other means to express this.  */
-        if (!check_acl(Context->mailbox, MUTT_ACL_DELETE, _("Can't delete messages")))
+        if (!check_acl(ctx_mailbox(Context), MUTT_ACL_DELETE, _("Can't delete messages")))
           break;
 
         mutt_pattern_func(Context, MUTT_DELETE, _("Delete messages matching: "));
@@ -1864,9 +1864,9 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           {
             /* try to find what used to be the current message */
             menu->current = -1;
-            for (size_t i = 0; i < Context->mailbox->vcount; i++)
+            for (size_t i = 0; i < ctx_mailbox(Context)->vcount; i++)
             {
-              struct Email *e = mutt_get_virt_email(Context->mailbox, i);
+              struct Email *e = mutt_get_virt_email(ctx_mailbox(Context), i);
               if (!e)
                 continue;
               if (e->index == menu->oldcurrent)
@@ -1881,7 +1881,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           else
             menu->current = 0;
           const short c_sort = cs_subset_sort(NeoMutt->sub, "sort");
-          if ((Context->mailbox->msg_count != 0) && ((c_sort & SORT_MASK) == SORT_THREADS))
+          if ((ctx_mailbox(Context)->msg_count != 0) && ((c_sort & SORT_MASK) == SORT_THREADS))
           {
             const bool c_collapse_all =
                 cs_subset_bool(NeoMutt->sub, "collapse_all");
@@ -1908,13 +1908,13 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         const enum QuadOption c_quit = cs_subset_quad(NeoMutt->sub, "quit");
         if (query_quadoption(c_quit, _("Quit NeoMutt?")) == MUTT_YES)
         {
-          oldcount = (Context && Context->mailbox) ? Context->mailbox->msg_count : 0;
+          oldcount = (Context && ctx_mailbox(Context)) ? ctx_mailbox(Context)->msg_count : 0;
 
           mutt_startup_shutdown_hook(MUTT_SHUTDOWN_HOOK);
           notify_send(NeoMutt->notify, NT_GLOBAL, NT_GLOBAL_SHUTDOWN, NULL);
 
           enum MxStatus check = MX_STATUS_OK;
-          if (!Context || ((check = mx_mbox_close(Context->mailbox)) == MX_STATUS_OK))
+          if (!Context || ((check = mx_mbox_close(ctx_mailbox(Context))) == MX_STATUS_OK))
           {
             ctx_free(&Context);
             done = true;
@@ -1951,7 +1951,8 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
       case OP_SEARCH:
         if (!prereq(Context, menu, CHECK_IN_MAILBOX))
           break;
-        menu->current = mutt_search_command(Context->mailbox, menu, menu->current, op);
+        menu->current =
+            mutt_search_command(ctx_mailbox(Context), menu, menu->current, op);
         if (menu->current == -1)
           menu->current = menu->oldcurrent;
         else
@@ -1963,7 +1964,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         if (!mutt_select_sort(op == OP_SORT_REVERSE))
           break;
 
-        if (ctx_mailbox(Context) && (Context->mailbox->msg_count != 0))
+        if (ctx_mailbox(Context) && (ctx_mailbox(Context)->msg_count != 0))
         {
           resort_index(Context, menu);
           OptSearchInvalid = true;
@@ -1983,7 +1984,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         const bool c_auto_tag = cs_subset_bool(NeoMutt->sub, "auto_tag");
         if (tag && !c_auto_tag)
         {
-          struct Mailbox *m = Context->mailbox;
+          struct Mailbox *m = ctx_mailbox(Context);
           for (size_t i = 0; i < m->msg_count; i++)
           {
             struct Email *e = m->emails[i];
@@ -1998,11 +1999,11 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         {
           if (!cur.e)
             break;
-          mutt_set_flag(Context->mailbox, cur.e, MUTT_TAG, !cur.e->tagged);
+          mutt_set_flag(ctx_mailbox(Context), cur.e, MUTT_TAG, !cur.e->tagged);
 
           menu->redraw |= REDRAW_STATUS;
           const bool c_resolve = cs_subset_bool(NeoMutt->sub, "resolve");
-          if (c_resolve && (menu->current < Context->mailbox->vcount - 1))
+          if (c_resolve && (menu->current < ctx_mailbox(Context)->vcount - 1))
           {
             menu->current++;
             menu->redraw |= REDRAW_MOTION_RESYNC;
@@ -2027,7 +2028,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         /* L10N: Due to the implementation details we do not know whether we
             undelete zero, 1, 12, ... messages. So in English we use
             "messages". Your language might have other means to express this. */
-        if (!check_acl(Context->mailbox, MUTT_ACL_DELETE, _("Can't undelete messages")))
+        if (!check_acl(ctx_mailbox(Context), MUTT_ACL_DELETE, _("Can't undelete messages")))
           break;
 
         if (mutt_pattern_func(Context, MUTT_UNDELETE, _("Undelete messages matching: ")) == 0)
@@ -2049,7 +2050,8 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           break;
         struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
         el_add_tagged(&el, Context, cur.e, tag);
-        mutt_send_message(SEND_TO_SENDER, NULL, NULL, Context->mailbox, &el, NeoMutt->sub);
+        mutt_send_message(SEND_TO_SENDER, NULL, NULL, ctx_mailbox(Context), &el,
+                          NeoMutt->sub);
         emaillist_clear(&el);
         menu->redraw = REDRAW_FULL;
         break;
@@ -2061,14 +2063,14 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
 
 #ifdef USE_IMAP
       case OP_MAIN_IMAP_FETCH:
-        if (ctx_mailbox(Context) && (Context->mailbox->type == MUTT_IMAP))
-          imap_check_mailbox(Context->mailbox, true);
+        if (ctx_mailbox(Context) && (ctx_mailbox(Context)->type == MUTT_IMAP))
+          imap_check_mailbox(ctx_mailbox(Context), true);
         break;
 
       case OP_MAIN_IMAP_LOGOUT_ALL:
-        if (ctx_mailbox(Context) && (Context->mailbox->type == MUTT_IMAP))
+        if (ctx_mailbox(Context) && (ctx_mailbox(Context)->type == MUTT_IMAP))
         {
-          const enum MxStatus check = mx_mbox_close(Context->mailbox);
+          const enum MxStatus check = mx_mbox_close(ctx_mailbox(Context));
           if (check == MX_STATUS_OK)
           {
             ctx_free(&Context);
@@ -2092,18 +2094,18 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
 #endif
 
       case OP_MAIN_SYNC_FOLDER:
-        if (!ctx_mailbox(Context) || (Context->mailbox->msg_count == 0))
+        if (!ctx_mailbox(Context) || (ctx_mailbox(Context)->msg_count == 0))
           break;
 
         if (!prereq(Context, menu, CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_READONLY))
           break;
         {
-          int ovc = Context->mailbox->vcount;
-          int oc = Context->mailbox->msg_count;
+          int ovc = ctx_mailbox(Context)->vcount;
+          int oc = ctx_mailbox(Context)->msg_count;
           struct Email *e = NULL;
 
           /* don't attempt to move the cursor if there are no visible messages in the current limit */
-          if (menu->current < Context->mailbox->vcount)
+          if (menu->current < ctx_mailbox(Context)->vcount)
           {
             /* threads may be reordered, so figure out what header the cursor
              * should be on. */
@@ -2111,21 +2113,21 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
             if (!cur.e)
               break;
             if (cur.e->deleted)
-              newidx = ci_next_undeleted(Context->mailbox, menu->current);
+              newidx = ci_next_undeleted(ctx_mailbox(Context), menu->current);
             if (newidx < 0)
-              newidx = ci_previous_undeleted(Context->mailbox, menu->current);
+              newidx = ci_previous_undeleted(ctx_mailbox(Context), menu->current);
             if (newidx >= 0)
-              e = mutt_get_virt_email(Context->mailbox, newidx);
+              e = mutt_get_virt_email(ctx_mailbox(Context), newidx);
           }
 
-          enum MxStatus check = mx_mbox_sync(Context->mailbox);
+          enum MxStatus check = mx_mbox_sync(ctx_mailbox(Context));
           if (check == MX_STATUS_OK)
           {
-            if (e && (Context->mailbox->vcount != ovc))
+            if (e && (ctx_mailbox(Context)->vcount != ovc))
             {
-              for (size_t i = 0; i < Context->mailbox->vcount; i++)
+              for (size_t i = 0; i < ctx_mailbox(Context)->vcount; i++)
               {
-                struct Email *e2 = mutt_get_virt_email(Context->mailbox, i);
+                struct Email *e2 = mutt_get_virt_email(ctx_mailbox(Context), i);
                 if (e2 == e)
                 {
                   menu->current = i;
@@ -2143,14 +2145,14 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           /* do a sanity check even if mx_mbox_sync failed.  */
 
           if ((menu->current < 0) ||
-              (ctx_mailbox(Context) && (menu->current >= Context->mailbox->vcount)))
+              (ctx_mailbox(Context) && (menu->current >= ctx_mailbox(Context)->vcount)))
           {
-            menu->current = ci_first_message(Context->mailbox);
+            menu->current = ci_first_message(ctx_mailbox(Context));
           }
         }
 
         /* check for a fatal error, or all messages deleted */
-        if (ctx_mailbox(Context) && mutt_buffer_is_empty(&Context->mailbox->pathbuf))
+        if (ctx_mailbox(Context) && mutt_buffer_is_empty(&ctx_mailbox(Context)->pathbuf))
           ctx_free(&Context);
 
         /* if we were in the pager, redisplay the message */
@@ -2168,7 +2170,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           break;
         if (tag)
         {
-          struct Mailbox *m = Context->mailbox;
+          struct Mailbox *m = ctx_mailbox(Context);
           for (size_t i = 0; i < m->msg_count; i++)
           {
             struct Email *e = m->emails[i];
@@ -2186,7 +2188,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           if (!cur.e)
             break;
           cur.e->quasi_deleted = true;
-          Context->mailbox->changed = true;
+          ctx_mailbox(Context)->changed = true;
         }
         break;
 
@@ -2196,9 +2198,10 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         if (!prereq(Context, menu, CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE))
           break;
         char buf[PATH_MAX] = { 0 };
-        if (Context->mailbox->type != MUTT_NOTMUCH)
+        if (ctx_mailbox(Context)->type != MUTT_NOTMUCH)
         {
-          if (((Context->mailbox->type != MUTT_MH) && (Context->mailbox->type != MUTT_MAILDIR)) ||
+          if (((ctx_mailbox(Context)->type != MUTT_MH) &&
+               (ctx_mailbox(Context)->type != MUTT_MAILDIR)) ||
               (!cur.e || !cur.e->env || !cur.e->env->message_id))
           {
             mutt_message(_("No virtual folder and no Message-Id, aborting"));
@@ -2219,21 +2222,21 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           // a valid message-id and will throw a segfault.
           //
           // To prevent that, stay in the empty vfolder and print an error.
-          if (Context->mailbox->msg_count == 0)
+          if (ctx_mailbox(Context)->msg_count == 0)
           {
             mutt_error(_("failed to find message in notmuch database. try "
                          "running 'notmuch new'."));
             break;
           }
         }
-        oldcount = Context->mailbox->msg_count;
-        struct Email *e_oldcur = mutt_get_virt_email(Context->mailbox, menu->current);
-        if (nm_read_entire_thread(Context->mailbox, e_oldcur) < 0)
+        oldcount = ctx_mailbox(Context)->msg_count;
+        struct Email *e_oldcur = mutt_get_virt_email(ctx_mailbox(Context), menu->current);
+        if (nm_read_entire_thread(ctx_mailbox(Context), e_oldcur) < 0)
         {
           mutt_message(_("Failed to read thread, aborting"));
           break;
         }
-        if (oldcount < Context->mailbox->msg_count)
+        if (oldcount < ctx_mailbox(Context)->msg_count)
         {
           /* nm_read_entire_thread() triggers mutt_sort_headers() if necessary */
           menu->current = e_oldcur->vnum;
@@ -2242,7 +2245,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           if (e_oldcur->collapsed || Context->collapsed)
           {
             menu->current = mutt_uncollapse_thread(e_oldcur);
-            mutt_set_vnum(Context->mailbox);
+            mutt_set_vnum(ctx_mailbox(Context));
           }
         }
         if (in_pager)
@@ -2259,7 +2262,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
       {
         if (!ctx_mailbox(Context))
           break;
-        struct Mailbox *m = Context->mailbox;
+        struct Mailbox *m = ctx_mailbox(Context);
         if (!mx_tags_is_supported(m))
         {
           mutt_message(_("Folder doesn't support tagging, aborting"));
@@ -2350,7 +2353,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           const bool c_resolve = cs_subset_bool(NeoMutt->sub, "resolve");
           if (c_resolve)
           {
-            menu->current = ci_next_undeleted(Context->mailbox, menu->current);
+            menu->current = ci_next_undeleted(ctx_mailbox(Context), menu->current);
             if (menu->current == -1)
             {
               menu->current = menu->oldcurrent;
@@ -2466,7 +2469,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         if (!prereq(Context, menu, CHECK_IN_MAILBOX))
           break;
 
-        struct Mailbox *m = Context->mailbox;
+        struct Mailbox *m = ctx_mailbox(Context);
 
         struct Buffer *folderbuf = mutt_buffer_pool_get();
         mutt_buffer_strcpy(folderbuf, mailbox_path(m));
@@ -2510,13 +2513,13 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         const bool c_change_folder_next =
             cs_subset_bool(NeoMutt->sub, "change_folder_next");
         if (c_change_folder_next && ctx_mailbox(Context) &&
-            !mutt_buffer_is_empty(&Context->mailbox->pathbuf))
+            !mutt_buffer_is_empty(&ctx_mailbox(Context)->pathbuf))
         {
-          mutt_buffer_strcpy(folderbuf, mailbox_path(Context->mailbox));
+          mutt_buffer_strcpy(folderbuf, mailbox_path(ctx_mailbox(Context)));
           mutt_buffer_pretty_mailbox(folderbuf);
         }
         /* By default, fill buf with the next mailbox that contains unread mail */
-        mutt_mailbox_next(Context ? Context->mailbox : NULL, folderbuf);
+        mutt_mailbox_next(Context ? ctx_mailbox(Context) : NULL, folderbuf);
 
         if (mutt_buffer_enter_fname(cp, folderbuf, true, ctx_mailbox(Context),
                                     false, NULL, NULL, MUTT_SEL_NO_FLAGS) == -1)
@@ -2579,21 +2582,21 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         const bool c_change_folder_next =
             cs_subset_bool(NeoMutt->sub, "change_folder_next");
         if (c_change_folder_next && ctx_mailbox(Context) &&
-            !mutt_buffer_is_empty(&Context->mailbox->pathbuf))
+            !mutt_buffer_is_empty(&ctx_mailbox(Context)->pathbuf))
         {
-          mutt_buffer_strcpy(folderbuf, mailbox_path(Context->mailbox));
+          mutt_buffer_strcpy(folderbuf, mailbox_path(ctx_mailbox(Context)));
           mutt_buffer_pretty_mailbox(folderbuf);
         }
 
         OptNews = true;
         const char *const c_news_server =
             cs_subset_string(NeoMutt->sub, "news_server");
-        CurrentNewsSrv = nntp_select_server(Context ? Context->mailbox : NULL,
+        CurrentNewsSrv = nntp_select_server(Context ? ctx_mailbox(Context) : NULL,
                                             c_news_server, false);
         if (!CurrentNewsSrv)
           goto changefoldercleanup2;
 
-        nntp_mailbox(Context ? Context->mailbox : NULL, folderbuf->data,
+        nntp_mailbox(Context ? ctx_mailbox(Context) : NULL, folderbuf->data,
                      folderbuf->dsize);
 
         if (mutt_buffer_enter_fname(cp, folderbuf, true, ctx_mailbox(Context),
@@ -2651,7 +2654,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         if (((c_sort & SORT_MASK) == SORT_THREADS) && cur.e->collapsed)
         {
           mutt_uncollapse_thread(cur.e);
-          mutt_set_vnum(Context->mailbox);
+          mutt_set_vnum(ctx_mailbox(Context));
           const bool c_uncollapse_jump =
               cs_subset_bool(NeoMutt->sub, "uncollapse_jump");
           if (c_uncollapse_jump)
@@ -2668,10 +2671,10 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
             menu->redraw |= REDRAW_FULL;
           emaillist_clear(&el);
         }
-        set_current_email(&cur, mutt_get_virt_email(Context->mailbox, menu->current));
+        set_current_email(&cur, mutt_get_virt_email(ctx_mailbox(Context), menu->current));
 
         op = mutt_display_message(win_index, win_ibar, win_pager, win_pbar,
-                                  Context->mailbox, cur.e);
+                                  ctx_mailbox(Context), cur.e);
         window_set_focus(win_index);
         if (op < 0)
         {
@@ -2685,7 +2688,8 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         in_pager = true;
         menu->oldcurrent = menu->current;
         if (ctx_mailbox(Context))
-          update_index(menu, Context, MX_STATUS_NEW_MAIL, Context->mailbox->msg_count, &cur);
+          update_index(menu, Context, MX_STATUS_NEW_MAIL,
+                       ctx_mailbox(Context)->msg_count, &cur);
         continue;
       }
 
@@ -2703,7 +2707,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         {
           if (Context)
           {
-            mx_fastclose_mailbox(Context->mailbox);
+            mx_fastclose_mailbox(ctx_mailbox(Context));
             ctx_free(&Context);
           }
           done = true;
@@ -2715,7 +2719,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         if (!prereq(Context, menu, CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE | CHECK_READONLY))
           break;
         /* L10N: CHECK_ACL */
-        if (!check_acl(Context->mailbox, MUTT_ACL_WRITE, _("Can't break thread")))
+        if (!check_acl(ctx_mailbox(Context), MUTT_ACL_WRITE, _("Can't break thread")))
           break;
         if (!cur.e)
           break;
@@ -2728,11 +2732,12 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         {
           {
             mutt_break_thread(cur.e);
-            mutt_sort_headers(Context->mailbox, Context->threads, true, &Context->vsize);
+            mutt_sort_headers(ctx_mailbox(Context), Context->threads, true,
+                              &Context->vsize);
             menu->current = cur.e->vnum;
           }
 
-          Context->mailbox->changed = true;
+          ctx_mailbox(Context)->changed = true;
           mutt_message(_("Thread broken"));
 
           if (in_pager)
@@ -2756,7 +2761,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         if (!prereq(Context, menu, CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE | CHECK_READONLY))
           break;
         /* L10N: CHECK_ACL */
-        if (!check_acl(Context->mailbox, MUTT_ACL_WRITE, _("Can't link threads")))
+        if (!check_acl(ctx_mailbox(Context), MUTT_ACL_WRITE, _("Can't link threads")))
           break;
         if (!cur.e)
           break;
@@ -2771,12 +2776,13 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
           el_add_tagged(&el, Context, NULL, true);
 
-          if (mutt_link_threads(cur.e, &el, Context->mailbox))
+          if (mutt_link_threads(cur.e, &el, ctx_mailbox(Context)))
           {
-            mutt_sort_headers(Context->mailbox, Context->threads, true, &Context->vsize);
+            mutt_sort_headers(ctx_mailbox(Context), Context->threads, true,
+                              &Context->vsize);
             menu->current = cur.e->vnum;
 
-            Context->mailbox->changed = true;
+            ctx_mailbox(Context)->changed = true;
             mutt_message(_("Threads linked"));
           }
           else
@@ -2817,13 +2823,13 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
       case OP_MAIN_NEXT_UNDELETED:
         if (!prereq(Context, menu, CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE))
           break;
-        if (menu->current >= (Context->mailbox->vcount - 1))
+        if (menu->current >= (ctx_mailbox(Context)->vcount - 1))
         {
           if (!in_pager)
             mutt_message(_("You are on the last message"));
           break;
         }
-        menu->current = ci_next_undeleted(Context->mailbox, menu->current);
+        menu->current = ci_next_undeleted(ctx_mailbox(Context), menu->current);
         if (menu->current == -1)
         {
           menu->current = menu->oldcurrent;
@@ -2842,7 +2848,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
       case OP_NEXT_ENTRY:
         if (!prereq(Context, menu, CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE))
           break;
-        if (menu->current >= (Context->mailbox->vcount - 1))
+        if (menu->current >= (ctx_mailbox(Context)->vcount - 1))
         {
           if (!in_pager)
             mutt_message(_("You are on the last message"));
@@ -2866,7 +2872,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           mutt_message(_("You are on the first message"));
           break;
         }
-        menu->current = ci_previous_undeleted(Context->mailbox, menu->current);
+        menu->current = ci_previous_undeleted(ctx_mailbox(Context), menu->current);
         if (menu->current == -1)
         {
           menu->current = menu->oldcurrent;
@@ -2926,7 +2932,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
             ((op == OP_DECRYPT_SAVE) || (op == OP_DECRYPT_COPY)) ? TRANSFORM_DECRYPT :
                                                                    TRANSFORM_NONE;
 
-        const int rc = mutt_save_message(Context->mailbox, &el, save_opt, transform_opt);
+        const int rc = mutt_save_message(ctx_mailbox(Context), &el, save_opt, transform_opt);
         if ((rc == 0) && (save_opt == SAVE_MOVE))
         {
           menu->redraw |= REDRAW_STATUS;
@@ -2935,7 +2941,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
             menu->redraw |= REDRAW_INDEX;
           else if (c_resolve)
           {
-            menu->current = ci_next_undeleted(Context->mailbox, menu->current);
+            menu->current = ci_next_undeleted(ctx_mailbox(Context), menu->current);
             if (menu->current == -1)
             {
               menu->current = menu->oldcurrent;
@@ -2967,13 +2973,13 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         const int saved_current = menu->current;
         int mcur = menu->current;
         menu->current = -1;
-        for (size_t i = 0; i != Context->mailbox->vcount; i++)
+        for (size_t i = 0; i != ctx_mailbox(Context)->vcount; i++)
         {
           if ((op == OP_MAIN_NEXT_NEW) || (op == OP_MAIN_NEXT_UNREAD) ||
               (op == OP_MAIN_NEXT_NEW_THEN_UNREAD))
           {
             mcur++;
-            if (mcur > (Context->mailbox->vcount - 1))
+            if (mcur > (ctx_mailbox(Context)->vcount - 1))
             {
               mcur = 0;
             }
@@ -2983,11 +2989,11 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
             mcur--;
             if (mcur < 0)
             {
-              mcur = Context->mailbox->vcount - 1;
+              mcur = ctx_mailbox(Context)->vcount - 1;
             }
           }
 
-          struct Email *e = mutt_get_virt_email(Context->mailbox, mcur);
+          struct Email *e = mutt_get_virt_email(ctx_mailbox(Context), mcur);
           if (!e)
             break;
           const short c_sort = cs_subset_sort(NeoMutt->sub, "sort");
@@ -3077,10 +3083,10 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         if (!prereq(Context, menu, CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE | CHECK_READONLY))
           break;
         /* L10N: CHECK_ACL */
-        if (!check_acl(Context->mailbox, MUTT_ACL_WRITE, _("Can't flag message")))
+        if (!check_acl(ctx_mailbox(Context), MUTT_ACL_WRITE, _("Can't flag message")))
           break;
 
-        struct Mailbox *m = Context->mailbox;
+        struct Mailbox *m = ctx_mailbox(Context);
         if (tag)
         {
           for (size_t i = 0; i < m->msg_count; i++)
@@ -3102,7 +3108,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           const bool c_resolve = cs_subset_bool(NeoMutt->sub, "resolve");
           if (c_resolve)
           {
-            menu->current = ci_next_undeleted(Context->mailbox, menu->current);
+            menu->current = ci_next_undeleted(ctx_mailbox(Context), menu->current);
             if (menu->current == -1)
             {
               menu->current = menu->oldcurrent;
@@ -3123,10 +3129,10 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         if (!prereq(Context, menu, CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE | CHECK_READONLY))
           break;
         /* L10N: CHECK_ACL */
-        if (!check_acl(Context->mailbox, MUTT_ACL_SEEN, _("Can't toggle new")))
+        if (!check_acl(ctx_mailbox(Context), MUTT_ACL_SEEN, _("Can't toggle new")))
           break;
 
-        struct Mailbox *m = Context->mailbox;
+        struct Mailbox *m = ctx_mailbox(Context);
         if (tag)
         {
           for (size_t i = 0; i < m->msg_count; i++)
@@ -3156,7 +3162,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           const bool c_resolve = cs_subset_bool(NeoMutt->sub, "resolve");
           if (c_resolve)
           {
-            menu->current = ci_next_undeleted(Context->mailbox, menu->current);
+            menu->current = ci_next_undeleted(ctx_mailbox(Context), menu->current);
             if (menu->current == -1)
             {
               menu->current = menu->oldcurrent;
@@ -3175,7 +3181,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
       case OP_TOGGLE_WRITE:
         if (!prereq(Context, menu, CHECK_IN_MAILBOX))
           break;
-        if (mx_toggle_write(Context->mailbox) == 0)
+        if (mx_toggle_write(ctx_mailbox(Context)) == 0)
         {
           if (in_pager)
           {
@@ -3263,7 +3269,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
         el_add_tagged(&el, Context, cur.e, tag);
 
-        if (mutt_change_flag(Context->mailbox, &el, (op == OP_MAIN_SET_FLAG)) == 0)
+        if (mutt_change_flag(ctx_mailbox(Context), &el, (op == OP_MAIN_SET_FLAG)) == 0)
         {
           menu->redraw |= REDRAW_STATUS;
           const bool c_resolve = cs_subset_bool(NeoMutt->sub, "resolve");
@@ -3271,7 +3277,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
             menu->redraw |= REDRAW_INDEX;
           else if (c_resolve)
           {
-            menu->current = ci_next_undeleted(Context->mailbox, menu->current);
+            menu->current = ci_next_undeleted(ctx_mailbox(Context), menu->current);
             if (menu->current == -1)
             {
               menu->current = menu->oldcurrent;
@@ -3305,7 +3311,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         if (cur.e->collapsed)
         {
           menu->current = mutt_uncollapse_thread(cur.e);
-          mutt_set_vnum(Context->mailbox);
+          mutt_set_vnum(ctx_mailbox(Context));
           const bool c_uncollapse_jump =
               cs_subset_bool(NeoMutt->sub, "uncollapse_jump");
           if (c_uncollapse_jump)
@@ -3314,7 +3320,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         else if (mutt_thread_can_collapse(cur.e))
         {
           menu->current = mutt_collapse_thread(cur.e);
-          mutt_set_vnum(Context->mailbox);
+          mutt_set_vnum(ctx_mailbox(Context));
         }
         else
         {
@@ -3352,7 +3358,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           break;
         struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
         el_add_tagged(&el, Context, cur.e, tag);
-        ci_bounce_message(Context->mailbox, &el);
+        ci_bounce_message(ctx_mailbox(Context), &el);
         emaillist_clear(&el);
         break;
       }
@@ -3379,18 +3385,18 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         if (!prereq(Context, menu, CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE | CHECK_READONLY))
           break;
         /* L10N: CHECK_ACL */
-        if (!check_acl(Context->mailbox, MUTT_ACL_DELETE, _("Can't delete message")))
+        if (!check_acl(ctx_mailbox(Context), MUTT_ACL_DELETE, _("Can't delete message")))
           break;
 
         struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
         el_add_tagged(&el, Context, cur.e, tag);
 
-        mutt_emails_set_flag(Context->mailbox, &el, MUTT_DELETE, true);
-        mutt_emails_set_flag(Context->mailbox, &el, MUTT_PURGE, (op == OP_PURGE_MESSAGE));
+        mutt_emails_set_flag(ctx_mailbox(Context), &el, MUTT_DELETE, true);
+        mutt_emails_set_flag(ctx_mailbox(Context), &el, MUTT_PURGE, (op == OP_PURGE_MESSAGE));
         const bool c_delete_untag =
             cs_subset_bool(NeoMutt->sub, "delete_untag");
         if (c_delete_untag)
-          mutt_emails_set_flag(Context->mailbox, &el, MUTT_TAG, false);
+          mutt_emails_set_flag(ctx_mailbox(Context), &el, MUTT_TAG, false);
         emaillist_clear(&el);
 
         if (tag)
@@ -3402,7 +3408,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           const bool c_resolve = cs_subset_bool(NeoMutt->sub, "resolve");
           if (c_resolve)
           {
-            menu->current = ci_next_undeleted(Context->mailbox, menu->current);
+            menu->current = ci_next_undeleted(ctx_mailbox(Context), menu->current);
             if (menu->current == -1)
             {
               menu->current = menu->oldcurrent;
@@ -3433,7 +3439,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         /* L10N: Due to the implementation details we do not know whether we
            delete zero, 1, 12, ... messages. So in English we use
            "messages". Your language might have other means to express this. */
-        if (!check_acl(Context->mailbox, MUTT_ACL_DELETE, _("Can't delete messages")))
+        if (!check_acl(ctx_mailbox(Context), MUTT_ACL_DELETE, _("Can't delete messages")))
           break;
         if (!cur.e)
           break;
@@ -3457,7 +3463,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         const bool c_resolve = cs_subset_bool(NeoMutt->sub, "resolve");
         if (c_resolve)
         {
-          menu->current = ci_next_undeleted(Context->mailbox, menu->current);
+          menu->current = ci_next_undeleted(ctx_mailbox(Context), menu->current);
           if (menu->current == -1)
             menu->current = menu->oldcurrent;
         }
@@ -3469,10 +3475,10 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
       case OP_CATCHUP:
         if (!prereq(Context, menu, CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_READONLY | CHECK_ATTACH))
           break;
-        if (Context && (Context->mailbox->type == MUTT_NNTP))
+        if (Context && (ctx_mailbox(Context)->type == MUTT_NNTP))
         {
-          struct NntpMboxData *mdata = Context->mailbox->mdata;
-          if (mutt_newsgroup_catchup(Context->mailbox, mdata->adata, mdata->group))
+          struct NntpMboxData *mdata = ctx_mailbox(Context)->mdata;
+          if (mutt_newsgroup_catchup(ctx_mailbox(Context), mdata->adata, mdata->group))
             menu->redraw = REDRAW_INDEX | REDRAW_STATUS;
         }
         break;
@@ -3492,7 +3498,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         mutt_enter_command();
         window_set_focus(win_index);
         if (Context)
-          mutt_check_rescore(Context->mailbox);
+          mutt_check_rescore(ctx_mailbox(Context));
         menu->redraw = REDRAW_FULL;
         break;
 
@@ -3509,12 +3515,13 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           if (!prereq(Context, menu, CHECK_READONLY))
             break;
           /* L10N: CHECK_ACL */
-          if (!check_acl(Context->mailbox, MUTT_ACL_INSERT, _("Can't edit message")))
+          if (!check_acl(ctx_mailbox(Context), MUTT_ACL_INSERT, _("Can't edit message")))
             break;
           edit = true;
         }
         else if (op == OP_EDIT_OR_VIEW_RAW_MESSAGE)
-          edit = !Context->mailbox->readonly && (Context->mailbox->rights & MUTT_ACL_INSERT);
+          edit = !ctx_mailbox(Context)->readonly &&
+                 (ctx_mailbox(Context)->rights & MUTT_ACL_INSERT);
         else
           edit = false;
 
@@ -3532,7 +3539,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         }
         struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
         el_add_tagged(&el, Context, cur.e, tag);
-        mutt_ev_message(Context->mailbox, &el, edit ? EVM_EDIT : EVM_VIEW);
+        mutt_ev_message(ctx_mailbox(Context), &el, edit ? EVM_EDIT : EVM_VIEW);
         emaillist_clear(&el);
         menu->redraw = REDRAW_FULL;
 
@@ -3554,7 +3561,8 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           if (mutt_check_traditional_pgp(ctx_mailbox(Context), &el))
             menu->redraw |= REDRAW_FULL;
         }
-        mutt_send_message(SEND_FORWARD, NULL, NULL, Context->mailbox, &el, NeoMutt->sub);
+        mutt_send_message(SEND_FORWARD, NULL, NULL, ctx_mailbox(Context), &el,
+                          NeoMutt->sub);
         emaillist_clear(&el);
         menu->redraw = REDRAW_FULL;
         break;
@@ -3585,7 +3593,8 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           if (mutt_check_traditional_pgp(ctx_mailbox(Context), &el))
             menu->redraw |= REDRAW_FULL;
         }
-        mutt_send_message(replyflags, NULL, NULL, Context->mailbox, &el, NeoMutt->sub);
+        mutt_send_message(replyflags, NULL, NULL, ctx_mailbox(Context), &el,
+                          NeoMutt->sub);
         emaillist_clear(&el);
         menu->redraw = REDRAW_FULL;
         break;
@@ -3598,12 +3607,12 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
 
         struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
         el_add_tagged(&el, Context, cur.e, tag);
-        int num_changed = mutt_label_message(Context->mailbox, &el);
+        int num_changed = mutt_label_message(ctx_mailbox(Context), &el);
         emaillist_clear(&el);
 
         if (num_changed > 0)
         {
-          Context->mailbox->changed = true;
+          ctx_mailbox(Context)->changed = true;
           menu->redraw = REDRAW_FULL;
           /* L10N: This is displayed when the x-label on one or more
              messages is edited. */
@@ -3635,8 +3644,8 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           if (mutt_check_traditional_pgp(ctx_mailbox(Context), &el))
             menu->redraw |= REDRAW_FULL;
         }
-        mutt_send_message(SEND_REPLY | SEND_LIST_REPLY, NULL, NULL, Context->mailbox,
-                          &el, NeoMutt->sub);
+        mutt_send_message(SEND_REPLY | SEND_LIST_REPLY, NULL, NULL,
+                          ctx_mailbox(Context), &el, NeoMutt->sub);
         emaillist_clear(&el);
         menu->redraw = REDRAW_FULL;
         break;
@@ -3645,7 +3654,8 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
       case OP_MAIL:
         if (!prereq(Context, menu, CHECK_ATTACH))
           break;
-        mutt_send_message(SEND_NO_FLAGS, NULL, NULL, Context->mailbox, NULL, NeoMutt->sub);
+        mutt_send_message(SEND_NO_FLAGS, NULL, NULL, ctx_mailbox(Context), NULL,
+                          NeoMutt->sub);
         menu->redraw = REDRAW_FULL;
         break;
 
@@ -3666,7 +3676,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           break;
         struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
         el_add_tagged(&el, Context, cur.e, tag);
-        crypt_extract_keys_from_messages(Context->mailbox, &el);
+        crypt_extract_keys_from_messages(ctx_mailbox(Context), &el);
         emaillist_clear(&el);
         menu->redraw = REDRAW_FULL;
         break;
@@ -3703,14 +3713,14 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           break;
         struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
         el_add_tagged(&el, Context, cur.e, tag);
-        mutt_pipe_message(Context->mailbox, &el);
+        mutt_pipe_message(ctx_mailbox(Context), &el);
         emaillist_clear(&el);
 
 #ifdef USE_IMAP
         /* in an IMAP folder index with imap_peek=no, piping could change
          * new or old messages status to read. Redraw what's needed.  */
         const bool c_imap_peek = cs_subset_bool(NeoMutt->sub, "imap_peek");
-        if ((Context->mailbox->type == MUTT_IMAP) && !c_imap_peek)
+        if ((ctx_mailbox(Context)->type == MUTT_IMAP) && !c_imap_peek)
         {
           menu->redraw |= (tag ? REDRAW_INDEX : REDRAW_CURRENT) | REDRAW_STATUS;
         }
@@ -3724,14 +3734,14 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           break;
         struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
         el_add_tagged(&el, Context, cur.e, tag);
-        mutt_print_message(Context->mailbox, &el);
+        mutt_print_message(ctx_mailbox(Context), &el);
         emaillist_clear(&el);
 
 #ifdef USE_IMAP
         /* in an IMAP folder index with imap_peek=no, printing could change
          * new or old messages status to read. Redraw what's needed.  */
         const bool c_imap_peek = cs_subset_bool(NeoMutt->sub, "imap_peek");
-        if ((Context->mailbox->type == MUTT_IMAP) && !c_imap_peek)
+        if ((ctx_mailbox(Context)->type == MUTT_IMAP) && !c_imap_peek)
         {
           menu->redraw |= (tag ? REDRAW_INDEX : REDRAW_CURRENT) | REDRAW_STATUS;
         }
@@ -3748,7 +3758,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         /* L10N: Due to the implementation details we do not know whether we
            mark zero, 1, 12, ... messages as read. So in English we use
            "messages". Your language might have other means to express this. */
-        if (!check_acl(Context->mailbox, MUTT_ACL_SEEN, _("Can't mark messages as read")))
+        if (!check_acl(ctx_mailbox(Context), MUTT_ACL_SEEN, _("Can't mark messages as read")))
           break;
 
         int rc = mutt_thread_set_flag(ctx_mailbox(Context), cur.e, MUTT_READ,
@@ -3822,7 +3832,8 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
       case OP_RECALL_MESSAGE:
         if (!prereq(Context, menu, CHECK_ATTACH))
           break;
-        mutt_send_message(SEND_POSTPONED, NULL, NULL, Context->mailbox, NULL, NeoMutt->sub);
+        mutt_send_message(SEND_POSTPONED, NULL, NULL, ctx_mailbox(Context),
+                          NULL, NeoMutt->sub);
         menu->redraw = REDRAW_FULL;
         break;
 
@@ -3832,19 +3843,19 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
 
         if (tag)
         {
-          struct Mailbox *m = Context->mailbox;
+          struct Mailbox *m = ctx_mailbox(Context);
           for (size_t i = 0; i < m->msg_count; i++)
           {
             struct Email *e = m->emails[i];
             if (!e)
               break;
             if (message_is_tagged(e))
-              mutt_resend_message(NULL, Context->mailbox, e, NeoMutt->sub);
+              mutt_resend_message(NULL, ctx_mailbox(Context), e, NeoMutt->sub);
           }
         }
         else
         {
-          mutt_resend_message(NULL, Context->mailbox, cur.e, NeoMutt->sub);
+          mutt_resend_message(NULL, ctx_mailbox(Context), cur.e, NeoMutt->sub);
         }
 
         menu->redraw = REDRAW_FULL;
@@ -3872,13 +3883,14 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         {
           const enum QuadOption c_post_moderated =
               cs_subset_quad(NeoMutt->sub, "post_moderated");
-          if (Context && (Context->mailbox->type == MUTT_NNTP) &&
-              !((struct NntpMboxData *) Context->mailbox->mdata)->allowed && (query_quadoption(c_post_moderated, _("Posting to this group not allowed, may be moderated. Continue?")) != MUTT_YES))
+          if (Context && (ctx_mailbox(Context)->type == MUTT_NNTP) &&
+              !((struct NntpMboxData *) ctx_mailbox(Context)->mdata)->allowed && (query_quadoption(c_post_moderated, _("Posting to this group not allowed, may be moderated. Continue?")) != MUTT_YES))
           {
             break;
           }
           if (op == OP_POST)
-            mutt_send_message(SEND_NEWS, NULL, NULL, Context->mailbox, NULL, NeoMutt->sub);
+            mutt_send_message(SEND_NEWS, NULL, NULL, ctx_mailbox(Context), NULL,
+                              NeoMutt->sub);
           else
           {
             if (!prereq(Context, menu, CHECK_IN_MAILBOX | CHECK_MSGCOUNT))
@@ -3886,7 +3898,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
             struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
             el_add_tagged(&el, Context, cur.e, tag);
             mutt_send_message(((op == OP_FOLLOWUP) ? SEND_REPLY : SEND_FORWARD) | SEND_NEWS,
-                              NULL, NULL, Context->mailbox, &el, NeoMutt->sub);
+                              NULL, NULL, ctx_mailbox(Context), &el, NeoMutt->sub);
             emaillist_clear(&el);
           }
           menu->redraw = REDRAW_FULL;
@@ -3910,7 +3922,8 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           if (mutt_check_traditional_pgp(ctx_mailbox(Context), &el))
             menu->redraw |= REDRAW_FULL;
         }
-        mutt_send_message(SEND_REPLY, NULL, NULL, Context->mailbox, &el, NeoMutt->sub);
+        mutt_send_message(SEND_REPLY, NULL, NULL, ctx_mailbox(Context), &el,
+                          NeoMutt->sub);
         emaillist_clear(&el);
         menu->redraw = REDRAW_FULL;
         break;
@@ -3956,14 +3969,14 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         if (!prereq(Context, menu, CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE | CHECK_READONLY))
           break;
         /* L10N: CHECK_ACL */
-        if (!check_acl(Context->mailbox, MUTT_ACL_DELETE, _("Can't undelete message")))
+        if (!check_acl(ctx_mailbox(Context), MUTT_ACL_DELETE, _("Can't undelete message")))
           break;
 
         struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
         el_add_tagged(&el, Context, cur.e, tag);
 
-        mutt_emails_set_flag(Context->mailbox, &el, MUTT_DELETE, false);
-        mutt_emails_set_flag(Context->mailbox, &el, MUTT_PURGE, false);
+        mutt_emails_set_flag(ctx_mailbox(Context), &el, MUTT_DELETE, false);
+        mutt_emails_set_flag(ctx_mailbox(Context), &el, MUTT_PURGE, false);
         emaillist_clear(&el);
 
         if (tag)
@@ -3973,7 +3986,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         else
         {
           const bool c_resolve = cs_subset_bool(NeoMutt->sub, "resolve");
-          if (c_resolve && (menu->current < (Context->mailbox->vcount - 1)))
+          if (c_resolve && (menu->current < (ctx_mailbox(Context)->vcount - 1)))
           {
             menu->current++;
             menu->redraw |= REDRAW_MOTION_RESYNC;
@@ -3995,7 +4008,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         /* L10N: Due to the implementation details we do not know whether we
             undelete zero, 1, 12, ... messages. So in English we use
             "messages". Your language might have other means to express this. */
-        if (!check_acl(Context->mailbox, MUTT_ACL_DELETE, _("Can't undelete messages")))
+        if (!check_acl(ctx_mailbox(Context), MUTT_ACL_DELETE, _("Can't undelete messages")))
           break;
 
         int rc = mutt_thread_set_flag(ctx_mailbox(Context), cur.e, MUTT_DELETE,
@@ -4036,9 +4049,9 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           break;
         if (!cur.e)
           break;
-        dlg_select_attachment(Context->mailbox, cur.e);
+        dlg_select_attachment(ctx_mailbox(Context), cur.e);
         if (cur.e->attach_del)
-          Context->mailbox->changed = true;
+          ctx_mailbox(Context)->changed = true;
         menu->redraw = REDRAW_FULL;
         break;
 
@@ -4085,7 +4098,7 @@ int mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
 
 #ifdef USE_NOTMUCH
     if (Context)
-      nm_db_debug_check(Context->mailbox);
+      nm_db_debug_check(ctx_mailbox(Context));
 #endif
 
     if (in_pager)
